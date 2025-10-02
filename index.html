@@ -221,6 +221,7 @@
         .log-saturophage { color: #d0ffa0; border-left-color: #d0ffa0; }
         .log-temporal { color: #ffd0a0; border-left-color: #ffd0a0; }
         .log-guild { color: #d0a0ff; border-left-color: #d0a0ff; }
+        .log-evolution { color: #ffdd00; border-left-color: #ffdd00; }
         
         #toggleOverlay {
             position: fixed;
@@ -297,7 +298,7 @@
     <div id="container">
         <div id="header">
             <h1>SORN-LAI: THE VAST FOREST</h1>
-            <div class="subtitle">Guild Research Simulation // Reality Classification: 12-Omega // Consciousness Network Active</div>
+            <div class="subtitle">Guild Research Simulation // Reality Classification: 12-Omega // Evolution Active</div>
         </div>
         
         <button id="toggleOverlay">◧ Toggle Data Overlay</button>
@@ -308,6 +309,7 @@
             <div id="viewportInfo">
                 <div>Viewport: <span id="viewX">0</span>, <span id="viewY">0</span></div>
                 <div>World Size: 480 × 240</div>
+                <div>Evolutions: <span id="evolutionCount">0</span></div>
                 <div style="color: #aaa; margin-top: 3px;">Drag to navigate</div>
             </div>
             
@@ -366,6 +368,10 @@
                         <div class="stat">
                             <span>Temporal Flow:</span>
                             <span class="stat-value" id="temporal">Normal</span>
+                        </div>
+                        <div class="stat">
+                            <span>Total Evolutions:</span>
+                            <span class="stat-value" id="totalEvolutions">0</span>
                         </div>
                     </div>
                     
@@ -493,15 +499,17 @@
     </div>
 
     <script>
-        // World configuration - EXPANDED
+        // World configuration
         const CONFIG = {
-            width: 480,  // 3x wider
-            height: 240, // 4x taller
-            viewWidth: 160,  // viewport width
-            viewHeight: 60,   // viewport height
+            width: 480,
+            height: 240,
+            viewWidth: 160,
+            viewHeight: 60,
             updateInterval: 400,
             saturophageSpreadRate: 0.01,
-            creatureSpawnRate: 0.001
+            creatureSpawnRate: 0.001,
+            evolutionCheckRate: 0.15, // Chance per cycle to check evolutions
+            mutationRate: 0.02 // Rare random mutations
         };
 
         // Bioregion presets
@@ -627,21 +635,82 @@
 
         // Extended creature types
         const CREATURES = {
-            SHA: { char: 'S', color: 'yellow', consciousness: 0.9, speed: 0.3 },
-            SIBULL: { char: 'B', color: 'purple', consciousness: 0.6, speed: 0.8 },
-            NORNITE: { char: 'n', color: 'cyan', consciousness: 0.3, speed: 1.0 },
-            GELSPUR: { char: 'g', color: 'green', consciousness: 0.7, speed: 0.5 },
+            SHA: { char: 'S', color: 'yellow', consciousness: 0.9, speed: 0.3, evolvesTo: 'SHA_ELDER' },
+            SHA_ELDER: { char: 'S', color: 'gold', consciousness: 1.0, speed: 0.2, evolved: true },
+            SIBULL: { char: 'B', color: 'purple', consciousness: 0.6, speed: 0.8, evolvesTo: 'SIBULL_ALPHA' },
+            SIBULL_ALPHA: { char: 'B', color: 'magenta', consciousness: 0.8, speed: 0.9, evolved: true },
+            NORNITE: { char: 'n', color: 'cyan', consciousness: 0.3, speed: 1.0, evolvesTo: 'NORNITE_SWARM' },
+            NORNITE_SWARM: { char: 'N', color: 'bright-cyan', consciousness: 0.5, speed: 0.8, evolved: true },
+            GELSPUR: { char: 'g', color: 'green', consciousness: 0.7, speed: 0.5, evolvesTo: 'GELSPUR_PRIME' },
+            GELSPUR_PRIME: { char: 'G', color: 'lime', consciousness: 0.9, speed: 0.6, evolved: true },
             THREADED: { char: 'T', color: 'bright-white', consciousness: 1.0, speed: 0.2 },
-            GUILD: { char: '@', color: 'pink', consciousness: 0.4, speed: 0.6 },
+            GUILD: { char: '@', color: 'pink', consciousness: 0.4, speed: 0.6, evolvesTo: 'GUILD_INTEGRATED' },
+            GUILD_INTEGRATED: { char: '@', color: 'violet', consciousness: 0.7, speed: 0.5, evolved: true },
             HOLOFLY: { char: 'h', color: 'lime', consciousness: 0.1, speed: 1.5 },
             VOIDWHISPER: { char: 'V', color: 'teal', consciousness: 0.8, speed: 0.4 },
-            FOX: { char: 'F', color: 'gold', consciousness: 0.5, speed: 0.9 },
-            TURTLE: { char: 't', color: 'brown', consciousness: 0.4, speed: 0.1 },
+            FOX: { char: 'F', color: 'gold', consciousness: 0.5, speed: 0.9, evolvesTo: 'FOX_HYBRID' },
+            FOX_HYBRID: { char: 'F', color: 'orange', consciousness: 0.7, speed: 1.0, evolved: true },
+            TURTLE: { char: 't', color: 'brown', consciousness: 0.4, speed: 0.1, evolvesTo: 'TURTLE_ANCIENT' },
+            TURTLE_ANCIENT: { char: 'T', color: 'gray', consciousness: 0.6, speed: 0.1, evolved: true },
             KORSYNTHARA: { char: 'K', color: 'orange', consciousness: 0.7, speed: 0.7 },
             YANTREX: { char: 'Y', color: 'violet', consciousness: 0.6, speed: 0.5 }
         };
 
-        // Game state with viewport
+        // Evolution rules for terrain
+        const TERRAIN_EVOLUTION = {
+            // Tree evolution paths
+            TREE: [
+                { to: 'THICKWOOD', minAge: 100, minSaturation: 0.3, chance: 0.3, name: 'mature' },
+                { to: 'WHITE_TREE', minAge: 200, minSaturation: 0.7, chance: 0.4, name: 'integrate' },
+                { to: 'SHA_SHELL', minAge: 500, minSaturation: 0.5, chance: 0.05, name: 'die' }
+            ],
+            THICKWOOD: [
+                { to: 'WHITE_TREE', minAge: 150, minSaturation: 0.6, chance: 0.5, name: 'integrate' },
+                { to: 'CIRCUIT_TREE', minAge: 300, minSaturation: 0.9, minConsciousness: 0.7, chance: 0.3, name: 'transcend' }
+            ],
+            WHITE_TREE: [
+                { to: 'CIRCUIT_TREE', minAge: 200, minConsciousness: 0.8, chance: 0.2, name: 'evolve' }
+            ],
+            GLIMMERFERN: [
+                { to: 'TREE', minAge: 80, chance: 0.4, name: 'grow' },
+                { to: 'WHITE_TREE', minAge: 150, minSaturation: 0.8, chance: 0.3, name: 'bloom' }
+            ],
+            // Water evolution
+            WATER: [
+                { to: 'LIVING_WATER', minAge: 200, minSaturation: 0.6, nearbyTypes: ['WHITE_TREE', 'CIRCUIT_TREE'], chance: 0.3, name: 'awaken' }
+            ],
+            RIVER: [
+                { to: 'LIVING_WATER', minAge: 300, minSaturation: 0.7, chance: 0.2, name: 'infuse' },
+                { to: 'CONSCIOUSNESS_STREAM', minAge: 500, minSaturation: 0.9, minConsciousness: 0.8, chance: 0.15, name: 'transcend' }
+            ],
+            LIVING_WATER: [
+                { to: 'CONSCIOUSNESS_STREAM', minAge: 200, minConsciousness: 0.7, chance: 0.25, name: 'evolve' }
+            ],
+            // Grass/Moss evolution
+            GRASS: [
+                { to: 'MOSS', minAge: 50, minSaturation: 0.2, chance: 0.3, name: 'thicken' },
+                { to: 'GLIMMERFERN', minAge: 100, minSaturation: 0.5, chance: 0.2, name: 'mutate' }
+            ],
+            MOSS: [
+                { to: 'GLIMMERFERN', minAge: 80, minSaturation: 0.4, chance: 0.25, name: 'evolve' }
+            ],
+            // Dead zone recovery
+            DEAD: [
+                { to: 'GRASS', minAge: 400, maxSaturation: 0.1, nearbyTypes: ['GRASS', 'TREE'], chance: 0.05, name: 'heal' }
+            ],
+            FAILED: [
+                { to: 'FLUX', minAge: 300, nearbyTypes: ['FLUX', 'MEMORY'], chance: 0.08, name: 'transform' }
+            ],
+            // Special evolutions
+            FLUX: [
+                { to: 'NETWORK_NODE', minAge: 200, minConsciousness: 0.6, nearbyTypes: ['WHITE_TREE', 'CIRCUIT_TREE'], chance: 0.15, name: 'stabilize' }
+            ],
+            MEMORY: [
+                { to: 'NETWORK_NODE', minAge: 250, minConsciousness: 0.7, chance: 0.1, name: 'crystallize' }
+            ]
+        };
+
+        // Game state
         const state = {
             world: [],
             heightMap: [],
@@ -660,7 +729,8 @@
                 y: 0,
                 width: CONFIG.viewWidth,
                 height: CONFIG.viewHeight
-            }
+            },
+            evolutionCount: 0
         };
 
         // Viewport dragging
@@ -683,7 +753,6 @@
                 const dx = dragStart.x - e.clientX;
                 const dy = dragStart.y - e.clientY;
                 
-                // Convert pixel movement to character movement (rough approximation)
                 const charDx = Math.floor(dx / 8);
                 const charDy = Math.floor(dy / 13);
                 
@@ -784,7 +853,7 @@
             initWorld();
         });
 
-        // Generate height map for terrain
+        // Generate height map
         function generateHeightMap(biome) {
             const rand = state.rng ? () => state.rng.next() : Math.random;
             const heightMap = [];
@@ -797,14 +866,12 @@
             }
             
             const mountainCount = biome.mountains || 8;
-            const mountains = [];
             
             for (let i = 0; i < mountainCount; i++) {
                 const mx = Math.floor(rand() * CONFIG.width);
                 const my = Math.floor(rand() * CONFIG.height);
                 const radius = 15 + Math.floor(rand() * 25);
                 const height = 0.7 + rand() * 0.3;
-                mountains.push({ x: mx, y: my, radius, height });
                 
                 for (let y = 0; y < CONFIG.height; y++) {
                     for (let x = 0; x < CONFIG.width; x++) {
@@ -959,14 +1026,159 @@
             return rivers;
         }
 
+        // Check for nearby cell types
+        function hasNearbyType(x, y, types, radius = 3) {
+            for (let dy = -radius; dy <= radius; dy++) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (nx >= 0 && nx < CONFIG.width && ny >= 0 && ny < CONFIG.height) {
+                        const cell = state.world[ny][nx];
+                        if (types.includes(cell.char)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        // Terrain evolution system
+        function checkTerrainEvolution(x, y) {
+            const cell = state.world[y][x];
+            if (!cell.age) cell.age = 0;
+            cell.age++;
+            
+            // Find cell type name
+            let cellTypeName = null;
+            for (const [name, type] of Object.entries(CELL_TYPES)) {
+                if (type.char === cell.char && type.color === cell.color) {
+                    cellTypeName = name;
+                    break;
+                }
+            }
+            
+            if (!cellTypeName || !TERRAIN_EVOLUTION[cellTypeName]) return;
+            
+            const evolutionPaths = TERRAIN_EVOLUTION[cellTypeName];
+            
+            for (const path of evolutionPaths) {
+                // Check all conditions
+                if (cell.age < path.minAge) continue;
+                if (path.minSaturation && cell.saturophage < path.minSaturation) continue;
+                if (path.maxSaturation && cell.saturophage > path.maxSaturation) continue;
+                if (path.minConsciousness && cell.consciousness < path.minConsciousness) continue;
+                if (path.nearbyTypes && !hasNearbyType(x, y, path.nearbyTypes.map(t => CELL_TYPES[t].char))) continue;
+                
+                // Roll for evolution
+                if (Math.random() < path.chance) {
+                    const newType = CELL_TYPES[path.to];
+                    const oldChar = cell.char;
+                    
+                    cell.char = newType.char;
+                    cell.color = newType.color;
+                    cell.saturophage = Math.max(cell.saturophage, newType.saturophage);
+                    cell.age = 0; // Reset age after evolution
+                    
+                    state.evolutionCount++;
+                    
+                    if (Math.random() < 0.1) { // Log some evolutions
+                        addLog('evolution', `${cellTypeName} ${path.name}s into ${path.to} at (${x},${y})`);
+                    }
+                    
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        // Creature evolution system
+        function checkCreatureEvolution(creature) {
+            if (creature.evolved) return false; // Already evolved
+            if (!creature.evolvesTo) return false; // No evolution path
+            
+            const creatureData = CREATURES[creature.type];
+            if (!creatureData.evolvesTo) return false;
+            
+            // Evolution conditions
+            const minAge = 300;
+            const minSaturation = 0.7;
+            const baseChance = 0.001;
+            
+            if (creature.age < minAge) return false;
+            if (creature.saturation < minSaturation) return false;
+            
+            // Probability increases with age and saturation
+            const ageBonus = Math.min((creature.age - minAge) / 500, 1);
+            const satBonus = (creature.saturation - minSaturation) / (1 - minSaturation);
+            const chance = baseChance * (1 + ageBonus + satBonus);
+            
+            if (Math.random() < chance) {
+                const oldType = creature.type;
+                const newType = creatureData.evolvesTo;
+                const newData = CREATURES[newType];
+                
+                creature.type = newType;
+                creature.char = newData.char;
+                creature.color = newData.color;
+                creature.consciousness = newData.consciousness;
+                creature.speed = newData.speed;
+                creature.evolved = true;
+                creature.evolvesTo = newData.evolvesTo;
+                
+                state.evolutionCount++;
+                addLog('evolution', `${oldType} evolves into ${newType} at (${creature.x},${creature.y})!`);
+                
+                return true;
+            }
+            
+            return false;
+        }
+
+        // Process all evolutions
+        function processEvolutions() {
+            if (Math.random() > CONFIG.evolutionCheckRate) return;
+            
+            // Check random terrain cells
+            const checksPerCycle = 50;
+            for (let i = 0; i < checksPerCycle; i++) {
+                const x = Math.floor(Math.random() * CONFIG.width);
+                const y = Math.floor(Math.random() * CONFIG.height);
+                checkTerrainEvolution(x, y);
+            }
+            
+            // Check all creatures
+            state.creatures.forEach(creature => {
+                checkCreatureEvolution(creature);
+            });
+            
+            // Random mutations - rare emergence of new features
+            if (Math.random() < CONFIG.mutationRate) {
+                const x = Math.floor(Math.random() * CONFIG.width);
+                const y = Math.floor(Math.random() * CONFIG.height);
+                const cell = state.world[y][x];
+                
+                // High saturation areas can spontaneously generate network nodes
+                if (cell.saturophage > 0.8 && cell.consciousness > 0.7 && Math.random() < 0.3) {
+                    if (cell.char !== '◉' && cell.char !== '◎' && cell.char !== '⚡') {
+                        cell.char = CELL_TYPES.NETWORK_NODE.char;
+                        cell.color = CELL_TYPES.NETWORK_NODE.color;
+                        addLog('evolution', `Spontaneous network node emerges at (${x},${y})!`);
+                        state.evolutionCount++;
+                    }
+                }
+            }
+        }
+
         function initWorld() {
             state.world = [];
             state.creatures = [];
             state.tableaus = [];
             state.cycle = 0;
             state.saturophageLevel = 0;
+            state.evolutionCount = 0;
             
-            // Center viewport
             state.viewport.x = Math.floor((CONFIG.width - CONFIG.viewWidth) / 2);
             state.viewport.y = Math.floor((CONFIG.height - CONFIG.viewHeight) / 2);
             
@@ -1024,6 +1236,7 @@
                     cell.temporal = 1.0;
                     cell.consciousness = biome.consciousness * rand() * 0.3;
                     cell.saturophage = Math.max(0, cell.saturophage + biome.saturation * rand() * 0.2);
+                    cell.age = Math.floor(rand() * 50); // Start with varied ages
                 }
             }
             
@@ -1048,7 +1261,7 @@
                     const x = Math.floor(rand() * CONFIG.width);
                     const y = Math.floor(rand() * CONFIG.height);
                     if (state.world[y][x].saturophage > 0.5) {
-                        state.world[y][x] = { ...CELL_TYPES.NETWORK_NODE, x, y, temporal: 1.0, consciousness: 0.8, saturophage: 0.8 };
+                        state.world[y][x] = { ...CELL_TYPES.NETWORK_NODE, x, y, temporal: 1.0, consciousness: 0.8, saturophage: 0.8, age: 0 };
                     }
                 }
             }
@@ -1085,13 +1298,13 @@
                 createTableau(tx, ty);
             }
             
-            state.world[5][10] = { ...CELL_TYPES.GUILD_STATION, x: 10, y: 5, temporal: 1.0, consciousness: 0 };
+            state.world[5][10] = { ...CELL_TYPES.GUILD_STATION, x: 10, y: 5, temporal: 1.0, consciousness: 0, age: 0 };
             
             const shellCount = biome.saturation > 0.6 ? 20 : 10;
             for (let i = 0; i < shellCount; i++) {
                 const x = Math.floor(rand() * CONFIG.width);
                 const y = Math.floor(rand() * CONFIG.height);
-                state.world[y][x] = { ...CELL_TYPES.SHA_SHELL, x, y, temporal: 1.0, consciousness: 0.5 };
+                state.world[y][x] = { ...CELL_TYPES.SHA_SHELL, x, y, temporal: 1.0, consciousness: 0.5, age: 0 };
             }
             
             const creatureMult = biome.creatures;
@@ -1115,6 +1328,7 @@
             }
             
             addLog('transform', `${biome.name} initialized - ${biome.description}`);
+            addLog('evolution', 'Evolution system active - entities will transform over time');
             if (state.seed) {
                 addLog('transform', `World seed: ${state.seed}`);
             }
@@ -1136,6 +1350,7 @@
                                 cell.char = Math.random() < 0.5 ? CELL_TYPES.DEAD.char : CELL_TYPES.FAILED.char;
                                 cell.color = Math.random() < 0.5 ? CELL_TYPES.DEAD.color : CELL_TYPES.FAILED.color;
                                 cell.saturophage = -1;
+                                cell.age = 0;
                             }
                         }
                     }
@@ -1155,9 +1370,9 @@
                     if (x >= 0 && x < CONFIG.width && y >= 0 && y < CONFIG.height) {
                         const dist = Math.sqrt(dx * dx + dy * dy);
                         if (dist < 3) {
-                            state.world[y][x] = { ...CELL_TYPES.TABLEAU, x, y, temporal: 1.0, consciousness: 1.0, saturophage: 1 };
+                            state.world[y][x] = { ...CELL_TYPES.TABLEAU, x, y, temporal: 1.0, consciousness: 1.0, saturophage: 1, age: 0 };
                         } else if (dist < 4) {
-                            state.world[y][x] = { ...CELL_TYPES.NETWORK_NODE, x, y, temporal: 1.2, consciousness: 0.8, saturophage: 0.8 };
+                            state.world[y][x] = { ...CELL_TYPES.NETWORK_NODE, x, y, temporal: 1.2, consciousness: 0.8, saturophage: 0.8, age: 0 };
                         }
                     }
                 }
@@ -1222,13 +1437,15 @@
             if (!x) x = Math.floor(Math.random() * CONFIG.width);
             if (!y) y = Math.floor(Math.random() * CONFIG.height);
             
+            const creatureData = CREATURES[type];
             const creature = {
-                ...CREATURES[type],
+                ...creatureData,
                 type,
                 x: Math.floor(x),
                 y: Math.floor(y),
                 age: 0,
-                saturation: 0
+                saturation: 0,
+                evolved: creatureData.evolved || false
             };
             
             state.creatures.push(creature);
@@ -1258,7 +1475,7 @@
                 const currentCell = state.world[creature.y][creature.x];
                 creature.saturation = Math.min(1, creature.saturation + currentCell.saturophage * 0.01);
                 
-                if (creature.type === 'SHA' && Math.random() < 0.05) {
+                if ((creature.type === 'SHA' || creature.type === 'SHA_ELDER') && Math.random() < 0.05) {
                     spreadSaturophage(creature.x, creature.y, 3);
                 }
                 
@@ -1267,7 +1484,7 @@
                     spreadSaturophage(creature.x, creature.y, 4);
                 }
                 
-                if (creature.type === 'GUILD' && currentCell.char === '◎' && Math.random() < 0.03) {
+                if ((creature.type === 'GUILD' || creature.type === 'GUILD_INTEGRATED') && currentCell.char === '◎' && Math.random() < 0.03) {
                     addLog('guild', `Researcher documents Tableau at (${creature.x},${creature.y})`);
                 }
                 
@@ -1310,6 +1527,9 @@
             
             state.cycle++;
             
+            // Process evolutions
+            processEvolutions();
+            
             if (Math.random() < CONFIG.saturophageSpreadRate) {
                 const sources = [];
                 for (let y = 0; y < CONFIG.height; y++) {
@@ -1345,7 +1565,7 @@
             }
             
             if (Math.random() < CONFIG.creatureSpawnRate && state.creatures.length < 400) {
-                const types = Object.keys(CREATURES);
+                const types = Object.keys(CREATURES).filter(t => !CREATURES[t].evolved);
                 const weights = {
                     HOLOFLY: 3,
                     NORNITE: 2,
@@ -1395,7 +1615,6 @@
             const scaleX = width / CONFIG.width;
             const scaleY = height / CONFIG.height;
             
-            // Sample world data
             for (let y = 0; y < CONFIG.height; y += 2) {
                 for (let x = 0; x < CONFIG.width; x += 2) {
                     const cell = state.world[y][x];
@@ -1420,7 +1639,6 @@
                 }
             }
             
-            // Draw viewport rectangle
             ctx.strokeStyle = '#ffff00';
             ctx.lineWidth = 1;
             ctx.strokeRect(
@@ -1435,7 +1653,6 @@
             let output = '';
             const creatureMap = new Map();
             
-            // Only map creatures in viewport
             state.creatures.forEach(c => {
                 if (c.x >= state.viewport.x && c.x < state.viewport.x + state.viewport.width &&
                     c.y >= state.viewport.y && c.y < state.viewport.y + state.viewport.height) {
@@ -1444,7 +1661,6 @@
                 }
             });
             
-            // Render only viewport
             for (let y = state.viewport.y; y < state.viewport.y + state.viewport.height; y++) {
                 for (let x = state.viewport.x; x < state.viewport.x + state.viewport.width; x++) {
                     const key = `${x},${y}`;
@@ -1463,6 +1679,7 @@
             document.getElementById('canvas').innerHTML = output;
             document.getElementById('viewX').textContent = state.viewport.x;
             document.getElementById('viewY').textContent = state.viewport.y;
+            document.getElementById('evolutionCount').textContent = state.evolutionCount;
         }
 
         function updateStats() {
@@ -1511,17 +1728,18 @@
             document.getElementById('biome-dead').textContent = Math.round(dead / total * 100) + '%';
             document.getElementById('biome-flux').textContent = flux + memory;
             document.getElementById('biome-tableau').textContent = state.tableaus.length;
+            document.getElementById('totalEvolutions').textContent = state.evolutionCount;
             
             const counts = {};
             Object.keys(CREATURES).forEach(k => counts[k] = 0);
             state.creatures.forEach(c => counts[c.type]++);
             
-            document.getElementById('entity-sha').textContent = counts.SHA;
-            document.getElementById('entity-sibull').textContent = counts.SIBULL;
-            document.getElementById('entity-nornite').textContent = counts.NORNITE;
-            document.getElementById('entity-gelspur').textContent = counts.GELSPUR;
+            document.getElementById('entity-sha').textContent = counts.SHA + counts.SHA_ELDER;
+            document.getElementById('entity-sibull').textContent = counts.SIBULL + counts.SIBULL_ALPHA;
+            document.getElementById('entity-nornite').textContent = counts.NORNITE + counts.NORNITE_SWARM;
+            document.getElementById('entity-gelspur').textContent = counts.GELSPUR + counts.GELSPUR_PRIME;
             document.getElementById('entity-threaded').textContent = counts.THREADED;
-            document.getElementById('entity-guild').textContent = counts.GUILD;
+            document.getElementById('entity-guild').textContent = counts.GUILD + counts.GUILD_INTEGRATED;
             document.getElementById('entity-holo').textContent = counts.HOLOFLY;
         }
 
@@ -1565,7 +1783,7 @@
         });
 
         document.getElementById('spawnBtn').addEventListener('click', () => {
-            const types = Object.keys(CREATURES);
+            const types = Object.keys(CREATURES).filter(t => !CREATURES[t].evolved);
             const type = types[Math.floor(Math.random() * types.length)];
             const x = state.viewport.x + Math.floor(Math.random() * state.viewport.width);
             const y = state.viewport.y + Math.floor(Math.random() * state.viewport.height);
@@ -1593,7 +1811,7 @@
             initWorld();
         });
 
-        // Initialize with balanced biome
+        // Initialize
         document.querySelector('[data-biome="balanced"]').classList.add('active');
         initWorld();
         let gameLoop = setInterval(updateWorld, state.updateInterval);
