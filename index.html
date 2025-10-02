@@ -51,8 +51,13 @@
             background: #000000;
             border: 1px solid rgba(255, 255, 255, 0.2);
             padding: 8px;
-            overflow: auto;
+            overflow: hidden;
             position: relative;
+            cursor: grab;
+        }
+        
+        #world:active {
+            cursor: grabbing;
         }
         
         #canvas {
@@ -61,6 +66,34 @@
             letter-spacing: 1px;
             white-space: pre;
             overflow: visible;
+            user-select: none;
+        }
+        
+        #minimap {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            width: 200px;
+            height: 100px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            z-index: 500;
+        }
+        
+        #minimapCanvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        #viewportInfo {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 5px 10px;
+            font-size: 10px;
+            z-index: 500;
         }
         
         #overlay {
@@ -272,6 +305,16 @@
         <div id="world">
             <div id="canvas"></div>
             
+            <div id="viewportInfo">
+                <div>Viewport: <span id="viewX">0</span>, <span id="viewY">0</span></div>
+                <div>World Size: 480 × 240</div>
+                <div style="color: #aaa; margin-top: 3px;">Drag to navigate</div>
+            </div>
+            
+            <div id="minimap">
+                <canvas id="minimapCanvas"></canvas>
+            </div>
+            
             <div id="overlay">
                 <div id="overlayHeader">
                     <h2>⚡ Guild Neural-Hex Interface</h2>
@@ -391,6 +434,7 @@
                             <button id="spreadBtn">Saturophage</button>
                             <button id="spawnBtn">Spawn</button>
                             <button id="tableauBtn">Tableau</button>
+                            <button id="centerBtn">Center View</button>
                             <button id="resetBtn">Reset</button>
                         </div>
                     </div>
@@ -449,13 +493,15 @@
     </div>
 
     <script>
-        // World configuration - SLOWED DOWN
+        // World configuration - EXPANDED
         const CONFIG = {
-            width: 160,
-            height: 60,
-            updateInterval: 400, // Slowed from 200 to 400ms
-            saturophageSpreadRate: 0.01, // Reduced spread rate
-            creatureSpawnRate: 0.001 // Reduced spawn rate
+            width: 480,  // 3x wider
+            height: 240, // 4x taller
+            viewWidth: 160,  // viewport width
+            viewHeight: 60,   // viewport height
+            updateInterval: 400,
+            saturophageSpreadRate: 0.01,
+            creatureSpawnRate: 0.001
         };
 
         // Bioregion presets
@@ -468,8 +514,8 @@
                 consciousness: 0.2,
                 deadZones: 0.05,
                 creatures: { sha: 1, threaded: 0.5, guild: 0.8, normal: 2 },
-                mountains: 3,
-                rivers: 2
+                mountains: 8,
+                rivers: 5
             },
             white_core: {
                 name: "White Forest Core",
@@ -480,8 +526,8 @@
                 deadZones: 0.02,
                 creatures: { sha: 3, threaded: 2, guild: 1.5, normal: 1 },
                 initialSaturationRadius: 20,
-                mountains: 2,
-                rivers: 1
+                mountains: 5,
+                rivers: 3
             },
             living_waters: {
                 name: "Living Waters",
@@ -491,8 +537,8 @@
                 consciousness: 0.5,
                 deadZones: 0.01,
                 creatures: { sha: 1.5, threaded: 1, guild: 1, normal: 2 },
-                mountains: 1,
-                rivers: 4
+                mountains: 3,
+                rivers: 10
             },
             dead_border: {
                 name: "Dead Zone Border",
@@ -502,8 +548,8 @@
                 consciousness: 0.3,
                 deadZones: 0.25,
                 creatures: { sha: 0.5, threaded: 0.3, guild: 1.5, normal: 1.5 },
-                mountains: 4,
-                rivers: 1
+                mountains: 10,
+                rivers: 2
             },
             pristine: {
                 name: "Pristine Wilderness",
@@ -513,8 +559,8 @@
                 consciousness: 0.05,
                 deadZones: 0,
                 creatures: { sha: 0.1, threaded: 0, guild: 0.5, normal: 4 },
-                mountains: 3,
-                rivers: 3
+                mountains: 7,
+                rivers: 6
             },
             reactive: {
                 name: "Reactive Groves",
@@ -525,8 +571,8 @@
                 deadZones: 0.03,
                 creatures: { sha: 2, threaded: 1.5, guild: 1, normal: 1.5 },
                 networkNodes: 3,
-                mountains: 2,
-                rivers: 2
+                mountains: 6,
+                rivers: 4
             },
             deep_reach: {
                 name: "Deep Reach",
@@ -537,8 +583,8 @@
                 deadZones: 0.08,
                 creatures: { sha: 1, threaded: 2, guild: 1.2, normal: 1 },
                 underground: true,
-                mountains: 6,
-                rivers: 1
+                mountains: 15,
+                rivers: 3
             },
             flux_realm: {
                 name: "Flux Realm",
@@ -549,8 +595,8 @@
                 deadZones: 0.06,
                 creatures: { sha: 1.5, threaded: 1, guild: 1, normal: 1.5 },
                 temporalChaos: 3,
-                mountains: 3,
-                rivers: 2
+                mountains: 8,
+                rivers: 5
             }
         };
 
@@ -595,7 +641,7 @@
             YANTREX: { char: 'Y', color: 'violet', consciousness: 0.6, speed: 0.5 }
         };
 
-        // Game state
+        // Game state with viewport
         const state = {
             world: [],
             heightMap: [],
@@ -608,8 +654,50 @@
             tableaus: [],
             currentBiome: 'balanced',
             seed: null,
-            rng: null
+            rng: null,
+            viewport: {
+                x: 0,
+                y: 0,
+                width: CONFIG.viewWidth,
+                height: CONFIG.viewHeight
+            }
         };
+
+        // Viewport dragging
+        let isDraggingWorld = false;
+        let dragStart = { x: 0, y: 0 };
+        let viewportStart = { x: 0, y: 0 };
+
+        const worldElement = document.getElementById('world');
+        
+        worldElement.addEventListener('mousedown', (e) => {
+            if (e.target === worldElement || e.target.id === 'canvas') {
+                isDraggingWorld = true;
+                dragStart = { x: e.clientX, y: e.clientY };
+                viewportStart = { x: state.viewport.x, y: state.viewport.y };
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDraggingWorld) {
+                const dx = dragStart.x - e.clientX;
+                const dy = dragStart.y - e.clientY;
+                
+                // Convert pixel movement to character movement (rough approximation)
+                const charDx = Math.floor(dx / 8);
+                const charDy = Math.floor(dy / 13);
+                
+                state.viewport.x = Math.max(0, Math.min(CONFIG.width - CONFIG.viewWidth, viewportStart.x + charDx));
+                state.viewport.y = Math.max(0, Math.min(CONFIG.height - CONFIG.viewHeight, viewportStart.y + charDy));
+                
+                render();
+                updateMinimap();
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDraggingWorld = false;
+        });
 
         // Seeded random number generator
         class SeededRandom {
@@ -701,7 +789,6 @@
             const rand = state.rng ? () => state.rng.next() : Math.random;
             const heightMap = [];
             
-            // Initialize with base noise
             for (let y = 0; y < CONFIG.height; y++) {
                 heightMap[y] = [];
                 for (let x = 0; x < CONFIG.width; x++) {
@@ -709,18 +796,16 @@
                 }
             }
             
-            // Add mountain clusters
-            const mountainCount = biome.mountains || 3;
+            const mountainCount = biome.mountains || 8;
             const mountains = [];
             
             for (let i = 0; i < mountainCount; i++) {
                 const mx = Math.floor(rand() * CONFIG.width);
                 const my = Math.floor(rand() * CONFIG.height);
-                const radius = 8 + Math.floor(rand() * 12);
+                const radius = 15 + Math.floor(rand() * 25);
                 const height = 0.7 + rand() * 0.3;
                 mountains.push({ x: mx, y: my, radius, height });
                 
-                // Create mountain with falloff
                 for (let y = 0; y < CONFIG.height; y++) {
                     for (let x = 0; x < CONFIG.width; x++) {
                         const dx = x - mx;
@@ -734,11 +819,10 @@
                 }
             }
             
-            // Add smaller hills between mountains
             for (let i = 0; i < mountainCount * 3; i++) {
                 const hx = Math.floor(rand() * CONFIG.width);
                 const hy = Math.floor(rand() * CONFIG.height);
-                const hradius = 4 + Math.floor(rand() * 6);
+                const hradius = 8 + Math.floor(rand() * 12);
                 const hheight = 0.2 + rand() * 0.3;
                 
                 for (let y = 0; y < CONFIG.height; y++) {
@@ -754,11 +838,10 @@
                 }
             }
             
-            // Add valleys (negative height)
             for (let i = 0; i < mountainCount * 2; i++) {
                 const vx = Math.floor(rand() * CONFIG.width);
                 const vy = Math.floor(rand() * CONFIG.height);
-                const vradius = 6 + Math.floor(rand() * 8);
+                const vradius = 12 + Math.floor(rand() * 18);
                 const vdepth = -(0.3 + rand() * 0.3);
                 
                 for (let y = 0; y < CONFIG.height; y++) {
@@ -774,7 +857,6 @@
                 }
             }
             
-            // Normalize and add subtle noise
             let minH = Infinity, maxH = -Infinity;
             for (let y = 0; y < CONFIG.height; y++) {
                 for (let x = 0; x < CONFIG.width; x++) {
@@ -786,7 +868,7 @@
             for (let y = 0; y < CONFIG.height; y++) {
                 for (let x = 0; x < CONFIG.width; x++) {
                     heightMap[y][x] = (heightMap[y][x] - minH) / (maxH - minH);
-                    heightMap[y][x] += (rand() - 0.5) * 0.05; // Subtle noise
+                    heightMap[y][x] += (rand() - 0.5) * 0.05;
                     heightMap[y][x] = Math.max(0, Math.min(1, heightMap[y][x]));
                 }
             }
@@ -794,14 +876,12 @@
             return heightMap;
         }
 
-        // Generate rivers that follow valleys with branching
         function generateRivers(heightMap, biome) {
             const rand = state.rng ? () => state.rng.next() : Math.random;
-            const riverCount = biome.rivers || 2;
+            const riverCount = biome.rivers || 5;
             const rivers = [];
             
             for (let r = 0; r < riverCount; r++) {
-                // Start from high elevation
                 let startX, startY, maxAttempts = 50;
                 do {
                     startX = Math.floor(rand() * CONFIG.width);
@@ -813,14 +893,12 @@
                 let x = startX, y = startY;
                 const visited = new Set();
                 
-                // Flow downhill
-                for (let step = 0; step < 150; step++) {
+                for (let step = 0; step < 300; step++) {
                     const key = `${x},${y}`;
                     if (visited.has(key)) break;
                     visited.add(key);
                     river.push({ x, y });
                     
-                    // Find lowest neighbor
                     let lowestH = heightMap[y][x];
                     let nextX = x, nextY = y;
                     
@@ -829,7 +907,6 @@
                         [-1, -1], [-1, 1], [1, -1], [1, 1]
                     ];
                     
-                    // Shuffle for variety
                     for (let i = directions.length - 1; i > 0; i--) {
                         const j = Math.floor(rand() * (i + 1));
                         [directions[i], directions[j]] = [directions[j], directions[i]];
@@ -848,7 +925,6 @@
                         }
                     }
                     
-                    // Occasionally branch
                     if (rand() < 0.08 && step > 20) {
                         const branchDir = directions[Math.floor(rand() * 4)];
                         const bx = x + branchDir[0];
@@ -856,12 +932,11 @@
                         if (bx >= 0 && bx < CONFIG.width && by >= 0 && by < CONFIG.height) {
                             const branch = [];
                             let branchX = bx, branchY = by;
-                            for (let b = 0; b < 30; b++) {
+                            for (let b = 0; b < 50; b++) {
                                 if (branchX < 0 || branchX >= CONFIG.width || 
                                     branchY < 0 || branchY >= CONFIG.height) break;
                                 branch.push({ x: branchX, y: branchY });
                                 
-                                // Follow general downstream direction
                                 const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
                                 const dir = dirs[Math.floor(rand() * dirs.length)];
                                 branchX += dir[0];
@@ -871,11 +946,10 @@
                         }
                     }
                     
-                    if (nextX === x && nextY === y) break; // Stuck
+                    if (nextX === x && nextY === y) break;
                     x = nextX;
                     y = nextY;
                     
-                    // Stop at water level
                     if (heightMap[y][x] < 0.25) break;
                 }
                 
@@ -885,7 +959,6 @@
             return rivers;
         }
 
-        // Initialize world with improved terrain
         function initWorld() {
             state.world = [];
             state.creatures = [];
@@ -893,21 +966,21 @@
             state.cycle = 0;
             state.saturophageLevel = 0;
             
+            // Center viewport
+            state.viewport.x = Math.floor((CONFIG.width - CONFIG.viewWidth) / 2);
+            state.viewport.y = Math.floor((CONFIG.height - CONFIG.viewHeight) / 2);
+            
             const rand = state.rng ? () => state.rng.next() : Math.random;
             const biome = BIOREGIONS[state.currentBiome];
             const terrain = biome.terrain;
             
-            // Generate height map
             state.heightMap = generateHeightMap(biome);
-            
-            // Generate rivers
             const rivers = generateRivers(state.heightMap, biome);
             const riverSet = new Set();
             rivers.forEach(river => {
                 river.forEach(({x, y}) => riverSet.add(`${x},${y}`));
             });
             
-            // Generate base terrain
             for (let y = 0; y < CONFIG.height; y++) {
                 state.world[y] = [];
                 for (let x = 0; x < CONFIG.width; x++) {
@@ -915,22 +988,18 @@
                     const r = rand();
                     let cell;
                     
-                    // Rivers follow valleys
                     if (riverSet.has(`${x},${y}`)) {
                         cell = { ...CELL_TYPES.RIVER, x, y };
                     }
-                    // Mountains and rocks at high elevation
                     else if (height > 0.75) {
                         cell = { ...CELL_TYPES.ROCK, x, y };
                     }
                     else if (height > 0.65 && r < terrain.rock * 2) {
                         cell = { ...CELL_TYPES.ROCK, x, y };
                     }
-                    // Water in valleys
                     else if (height < 0.25 && r < terrain.water * 3) {
                         cell = { ...CELL_TYPES.WATER, x, y };
                     }
-                    // Trees on moderate slopes
                     else if (height > 0.35 && height < 0.6) {
                         if (r < terrain.tree * 0.3) {
                             cell = { ...CELL_TYPES.THICKWOOD, x, y };
@@ -944,7 +1013,6 @@
                             cell = { ...CELL_TYPES.GRASS, x, y };
                         }
                     }
-                    // Grass in flat areas
                     else if (r < terrain.grass) {
                         cell = height < 0.4 ? { ...CELL_TYPES.MOSS, x, y } : { ...CELL_TYPES.GRASS, x, y };
                     }
@@ -962,14 +1030,12 @@
             const centerX = Math.floor(CONFIG.width / 2);
             const centerY = Math.floor(CONFIG.height / 2);
             
-            // Apply bioregion-specific transformations
             if (biome.initialSaturationRadius) {
                 spreadSaturophage(centerX, centerY, biome.initialSaturationRadius);
             } else {
                 spreadSaturophage(centerX, centerY, 8);
             }
             
-            // Add Dead Zones
             const deadZoneCount = Math.floor(CONFIG.width * CONFIG.height * biome.deadZones / 100);
             for (let i = 0; i < deadZoneCount; i++) {
                 const x = Math.floor(rand() * CONFIG.width);
@@ -977,9 +1043,8 @@
                 spreadDeadZone(x, y, 2 + Math.floor(rand() * 3));
             }
             
-            // Network nodes
             if (biome.networkNodes) {
-                for (let i = 0; i < biome.networkNodes * 5; i++) {
+                for (let i = 0; i < biome.networkNodes * 15; i++) {
                     const x = Math.floor(rand() * CONFIG.width);
                     const y = Math.floor(rand() * CONFIG.height);
                     if (state.world[y][x].saturophage > 0.5) {
@@ -988,9 +1053,8 @@
                 }
             }
             
-            // Temporal chaos
             if (biome.temporalChaos) {
-                for (let i = 0; i < biome.temporalChaos * 10; i++) {
+                for (let i = 0; i < biome.temporalChaos * 30; i++) {
                     const x = Math.floor(rand() * CONFIG.width);
                     const y = Math.floor(rand() * CONFIG.height);
                     const cell = state.world[y][x];
@@ -1006,8 +1070,7 @@
                 }
             }
             
-            // Create Tableaus in valleys
-            const tableauCount = biome.saturation > 0.5 ? 3 : 1;
+            const tableauCount = Math.floor((biome.saturation > 0.5 ? 9 : 5));
             for (let i = 0; i < tableauCount; i++) {
                 let tx, ty, minHeight = 1;
                 for (let attempt = 0; attempt < 20; attempt++) {
@@ -1022,34 +1085,31 @@
                 createTableau(tx, ty);
             }
             
-            // Guild Station
             state.world[5][10] = { ...CELL_TYPES.GUILD_STATION, x: 10, y: 5, temporal: 1.0, consciousness: 0 };
             
-            // Sha Shells
-            const shellCount = biome.saturation > 0.6 ? 8 : 3;
+            const shellCount = biome.saturation > 0.6 ? 20 : 10;
             for (let i = 0; i < shellCount; i++) {
                 const x = Math.floor(rand() * CONFIG.width);
                 const y = Math.floor(rand() * CONFIG.height);
                 state.world[y][x] = { ...CELL_TYPES.SHA_SHELL, x, y, temporal: 1.0, consciousness: 0.5 };
             }
             
-            // Spawn creatures
             const creatureMult = biome.creatures;
             
-            for (let i = 0; i < Math.floor(2 * creatureMult.sha); i++) {
-                spawnCreature('SHA', centerX + (rand() - 0.5) * 40, centerY + (rand() - 0.5) * 30);
+            for (let i = 0; i < Math.floor(5 * creatureMult.sha); i++) {
+                spawnCreature('SHA', centerX + (rand() - 0.5) * 100, centerY + (rand() - 0.5) * 80);
             }
             
-            for (let i = 0; i < Math.floor(2 * creatureMult.threaded); i++) {
+            for (let i = 0; i < Math.floor(5 * creatureMult.threaded); i++) {
                 spawnCreature('THREADED');
             }
             
-            for (let i = 0; i < Math.floor(2 * creatureMult.guild); i++) {
-                spawnCreature('GUILD', 10 + rand() * 20, 5 + rand() * 10);
+            for (let i = 0; i < Math.floor(5 * creatureMult.guild); i++) {
+                spawnCreature('GUILD', 10 + rand() * 40, 5 + rand() * 20);
             }
             
             const normalCreatures = ['NORNITE', 'HOLOFLY', 'FOX', 'TURTLE', 'GELSPUR', 'SIBULL'];
-            for (let i = 0; i < Math.floor(10 * creatureMult.normal); i++) {
+            for (let i = 0; i < Math.floor(30 * creatureMult.normal); i++) {
                 const type = normalCreatures[Math.floor(rand() * normalCreatures.length)];
                 spawnCreature(type);
             }
@@ -1058,6 +1118,9 @@
             if (state.seed) {
                 addLog('transform', `World seed: ${state.seed}`);
             }
+            
+            updateMinimap();
+            render();
         }
 
         function spreadDeadZone(cx, cy, radius) {
@@ -1210,7 +1273,7 @@
                 
                 if (creature.type === 'HOLOFLY' && Math.random() < 0.1) {
                     const nearbyPlant = findNearbyType(creature.x, creature.y, ['♠', '♣', '♦', '◊']);
-                    if (nearbyPlant && state.creatures.length < 100) {
+                    if (nearbyPlant && state.creatures.length < 300) {
                         spawnCreature('HOLOFLY', nearbyPlant.x, nearbyPlant.y);
                     }
                 }
@@ -1281,7 +1344,7 @@
                 }
             }
             
-            if (Math.random() < CONFIG.creatureSpawnRate && state.creatures.length < 150) {
+            if (Math.random() < CONFIG.creatureSpawnRate && state.creatures.length < 400) {
                 const types = Object.keys(CREATURES);
                 const weights = {
                     HOLOFLY: 3,
@@ -1313,18 +1376,77 @@
             updateCreatures();
             updateStats();
             render();
+            
+            if (state.cycle % 10 === 0) {
+                updateMinimap();
+            }
+        }
+
+        // Minimap
+        function updateMinimap() {
+            const canvas = document.getElementById('minimapCanvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width = 200;
+            const height = canvas.height = 100;
+            
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, width, height);
+            
+            const scaleX = width / CONFIG.width;
+            const scaleY = height / CONFIG.height;
+            
+            // Sample world data
+            for (let y = 0; y < CONFIG.height; y += 2) {
+                for (let x = 0; x < CONFIG.width; x += 2) {
+                    const cell = state.world[y][x];
+                    const px = Math.floor(x * scaleX);
+                    const py = Math.floor(y * scaleY);
+                    
+                    if (cell.saturophage > 0.7) {
+                        ctx.fillStyle = '#e8e8e8';
+                    } else if (cell.char === '∼' || cell.char === '≈') {
+                        ctx.fillStyle = '#00d4ff';
+                    } else if (cell.char === '■') {
+                        ctx.fillStyle = '#aa6644';
+                    } else if (cell.saturophage === -1) {
+                        ctx.fillStyle = '#ff4444';
+                    } else if (cell.char === '♠' || cell.char === '♣') {
+                        ctx.fillStyle = '#00aa44';
+                    } else {
+                        ctx.fillStyle = '#1a1a1a';
+                    }
+                    
+                    ctx.fillRect(px, py, Math.ceil(2 * scaleX), Math.ceil(2 * scaleY));
+                }
+            }
+            
+            // Draw viewport rectangle
+            ctx.strokeStyle = '#ffff00';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(
+                state.viewport.x * scaleX,
+                state.viewport.y * scaleY,
+                state.viewport.width * scaleX,
+                state.viewport.height * scaleY
+            );
         }
 
         function render() {
             let output = '';
             const creatureMap = new Map();
+            
+            // Only map creatures in viewport
             state.creatures.forEach(c => {
-                const key = `${c.x},${c.y}`;
-                creatureMap.set(key, c);
+                if (c.x >= state.viewport.x && c.x < state.viewport.x + state.viewport.width &&
+                    c.y >= state.viewport.y && c.y < state.viewport.y + state.viewport.height) {
+                    const key = `${c.x},${c.y}`;
+                    creatureMap.set(key, c);
+                }
             });
             
-            for (let y = 0; y < CONFIG.height; y++) {
-                for (let x = 0; x < CONFIG.width; x++) {
+            // Render only viewport
+            for (let y = state.viewport.y; y < state.viewport.y + state.viewport.height; y++) {
+                for (let x = state.viewport.x; x < state.viewport.x + state.viewport.width; x++) {
                     const key = `${x},${y}`;
                     
                     if (creatureMap.has(key)) {
@@ -1339,6 +1461,8 @@
             }
             
             document.getElementById('canvas').innerHTML = output;
+            document.getElementById('viewX').textContent = state.viewport.x;
+            document.getElementById('viewY').textContent = state.viewport.y;
         }
 
         function updateStats() {
@@ -1434,8 +1558,8 @@
         });
 
         document.getElementById('spreadBtn').addEventListener('click', () => {
-            const x = Math.floor(Math.random() * CONFIG.width);
-            const y = Math.floor(Math.random() * CONFIG.height);
+            const x = state.viewport.x + Math.floor(state.viewport.width / 2);
+            const y = state.viewport.y + Math.floor(state.viewport.height / 2);
             spreadSaturophage(x, y, 10);
             addLog('saturophage', `Saturophage surge at (${x},${y})`);
         });
@@ -1443,13 +1567,22 @@
         document.getElementById('spawnBtn').addEventListener('click', () => {
             const types = Object.keys(CREATURES);
             const type = types[Math.floor(Math.random() * types.length)];
-            spawnCreature(type);
+            const x = state.viewport.x + Math.floor(Math.random() * state.viewport.width);
+            const y = state.viewport.y + Math.floor(Math.random() * state.viewport.height);
+            spawnCreature(type, x, y);
         });
 
         document.getElementById('tableauBtn').addEventListener('click', () => {
-            const x = 20 + Math.floor(Math.random() * (CONFIG.width - 40));
-            const y = 10 + Math.floor(Math.random() * (CONFIG.height - 20));
+            const x = state.viewport.x + Math.floor(Math.random() * state.viewport.width);
+            const y = state.viewport.y + Math.floor(Math.random() * state.viewport.height);
             createTableau(x, y);
+        });
+
+        document.getElementById('centerBtn').addEventListener('click', () => {
+            state.viewport.x = Math.floor((CONFIG.width - CONFIG.viewWidth) / 2);
+            state.viewport.y = Math.floor((CONFIG.height - CONFIG.viewHeight) / 2);
+            render();
+            updateMinimap();
         });
 
         document.getElementById('resetBtn').addEventListener('click', () => {
@@ -1463,7 +1596,6 @@
         // Initialize with balanced biome
         document.querySelector('[data-biome="balanced"]').classList.add('active');
         initWorld();
-        render();
         let gameLoop = setInterval(updateWorld, state.updateInterval);
     </script>
 </body>
