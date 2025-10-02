@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sorn-Lai: The Vast Forest</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(to bottom, #0a0a0a, #1a1a2e);
+            font-family: 'Courier New', monospace;
+            color: #e0e0e0;
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 10px;
+        }
+        
+        #header {
+            text-align: center;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 10px;
+        }
+        
+        #header h1 {
+            font-size: 18px;
+            color: #f0f0f0;
+            margin-bottom: 5px;
+            text-shadow: 0 0 10px rgba(240, 240, 240, 0.3);
+        }
+        
+        #header .subtitle {
+            font-size: 11px;
+            color: #a0a0a0;
+        }
+        
+        #world {
+            flex: 1;
+            background: #000000;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 8px;
+            overflow: auto;
+            position: relative;
+        }
+        
+        #canvas {
+            font-size: 11px;
+            line-height: 13px;
+            letter-spacing: 1px;
+            white-space: pre;
+            overflow: visible;
+        }
+        
+        #overlay {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 340px;
+            background: rgba(0, 0, 0, 0.92);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: #e0e0e0;
+            font-size: 10px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        #overlay.hidden {
+            display: none;
+        }
+        
+        #overlayHeader {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px;
+            cursor: move;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        #overlayHeader h2 {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        #overlayClose {
+            cursor: pointer;
+            padding: 2px 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        #overlayClose:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        #overlayContent {
+            padding: 10px;
+        }
+        
+        .section {
+            margin-bottom: 12px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 2px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .section h3 {
+            font-size: 11px;
+            color: #f0f0f0;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            margin: 3px 0;
+            color: #c0c0c0;
+            font-size: 10px;
+        }
+        
+        .stat-value {
+            color: #e0e0e0;
+            font-weight: bold;
+        }
+        
+        #controls {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+        
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #e0e0e0;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+        }
+        
+        button.active {
+            background: rgba(100, 200, 255, 0.3);
+            border-color: rgba(100, 200, 255, 0.6);
+        }
+        
+        #log {
+            max-height: 120px;
+            overflow-y: auto;
+            font-size: 9px;
+            line-height: 1.4;
+        }
+        
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 4px;
+            border-left: 2px solid transparent;
+        }
+        
+        .log-transform { color: #a0d0ff; border-left-color: #a0d0ff; }
+        .log-creature { color: #ffa0d0; border-left-color: #ffa0d0; }
+        .log-saturophage { color: #d0ffa0; border-left-color: #d0ffa0; }
+        .log-temporal { color: #ffd0a0; border-left-color: #ffd0a0; }
+        .log-guild { color: #d0a0ff; border-left-color: #d0a0ff; }
+        
+        #toggleOverlay {
+            position: fixed;
+            top: 60px;
+            right: 20px;
+            z-index: 999;
+            padding: 8px 12px;
+        }
+        
+        .legend-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 4px 8px;
+            line-height: 1.6;
+            font-size: 9px;
+        }
+        
+        .legend-item {
+            display: contents;
+        }
+        
+        select, input[type="text"], input[type="number"] {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #e0e0e0;
+            padding: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+            width: 100%;
+            margin-top: 4px;
+        }
+        
+        .biome-selector {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+        
+        .biome-btn {
+            flex: 1 1 calc(50% - 2px);
+            min-width: 80px;
+            font-size: 8px;
+            padding: 6px 4px;
+        }
+        
+        /* ASCII Color Classes - Extended */
+        .white { color: #f0f0f0; }
+        .pearl { color: #e8e8e8; text-shadow: 0 0 5px rgba(232, 232, 232, 0.3); }
+        .bright-white { color: #ffffff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.5); }
+        .cyan { color: #00d4ff; }
+        .bright-cyan { color: #5fffff; text-shadow: 0 0 5px rgba(95, 255, 255, 0.3); }
+        .green { color: #00ff88; }
+        .dark-green { color: #00aa44; }
+        .lime { color: #aaff00; }
+        .yellow { color: #ffff00; }
+        .gold { color: #ffaa00; }
+        .orange { color: #ff8800; }
+        .red { color: #ff4444; }
+        .dark-red { color: #aa0000; }
+        .purple { color: #dd88ff; }
+        .magenta { color: #ff00ff; }
+        .pink { color: #ffaacc; }
+        .blue { color: #4488ff; }
+        .gray { color: #888888; }
+        .light-gray { color: #aaaaaa; }
+        .dark-gray { color: #444444; }
+        .brown { color: #aa6644; }
+        .violet { color: #aa44ff; }
+        .teal { color: #00aaaa; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="header">
+            <h1>SORN-LAI: THE VAST FOREST</h1>
+            <div class="subtitle">Guild Research Simulation // Reality Classification: 12-Omega // Consciousness Network Active</div>
+        </div>
+        
+        <button id="toggleOverlay">◧ Toggle Data Overlay</button>
+        
+        <div id="world">
+            <div id="canvas"></div>
+            
+            <div id="overlay">
+                <div id="overlayHeader">
+                    <h2>⚡ Guild Neural-Hex Interface</h2>
+                    <span id="overlayClose">×</span>
+                </div>
+                <div id="overlayContent">
+                    <div class="section">
+                        <h3>Bioregion Generation</h3>
+                        <div class="stat">
+                            <span>Current Region:</span>
+                            <span class="stat-value" id="currentBiome">Balanced</span>
+                        </div>
+                        <div class="stat">
+                            <span>World Seed:</span>
+                            <span class="stat-value" id="currentSeed">Random</span>
+                        </div>
+                        <div class="biome-selector">
+                            <button class="biome-btn" data-biome="balanced">Balanced Forest</button>
+                            <button class="biome-btn" data-biome="white_core">White Forest Core</button>
+                            <button class="biome-btn" data-biome="living_waters">Living Waters</button>
+                            <button class="biome-btn" data-biome="dead_border">Dead Zone Border</button>
+                            <button class="biome-btn" data-biome="pristine">Pristine Wilderness</button>
+                            <button class="biome-btn" data-biome="reactive">Reactive Groves</button>
+                            <button class="biome-btn" data-biome="deep_reach">Deep Reach</button>
+                            <button class="biome-btn" data-biome="flux_realm">Flux Realm</button>
+                        </div>
+                        <input type="text" id="seedInput" placeholder="Enter seed (optional)">
+                        <button id="generateBtn" style="width: 100%; margin-top: 4px;">Generate New World</button>
+                    </div>
+                    
+                    <div class="section">
+                        <h3>World Status</h3>
+                        <div class="stat">
+                            <span>Cycle:</span>
+                            <span class="stat-value" id="cycle">0</span>
+                        </div>
+                        <div class="stat">
+                            <span>Saturophage:</span>
+                            <span class="stat-value" id="saturation">0%</span>
+                        </div>
+                        <div class="stat">
+                            <span>Consciousness:</span>
+                            <span class="stat-value" id="consciousness">Low</span>
+                        </div>
+                        <div class="stat">
+                            <span>Integration:</span>
+                            <span class="stat-value" id="integration">Stable</span>
+                        </div>
+                        <div class="stat">
+                            <span>Temporal Flow:</span>
+                            <span class="stat-value" id="temporal">Normal</span>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <h3>Biome Distribution</h3>
+                        <div class="stat">
+                            <span>White Forest:</span>
+                            <span class="stat-value" id="biome-forest">0%</span>
+                        </div>
+                        <div class="stat">
+                            <span>Living Waters:</span>
+                            <span class="stat-value" id="biome-water">0%</span>
+                        </div>
+                        <div class="stat">
+                            <span>Dead Zones:</span>
+                            <span class="stat-value" id="biome-dead">0%</span>
+                        </div>
+                        <div class="stat">
+                            <span>Flux Zones:</span>
+                            <span class="stat-value" id="biome-flux">0%</span>
+                        </div>
+                        <div class="stat">
+                            <span>Tableaus:</span>
+                            <span class="stat-value" id="biome-tableau">0</span>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <h3>Active Entities</h3>
+                        <div class="stat">
+                            <span>Wandering Sha:</span>
+                            <span class="stat-value" id="entity-sha">0</span>
+                        </div>
+                        <div class="stat">
+                            <span>Si-Bulls:</span>
+                            <span class="stat-value" id="entity-sibull">0</span>
+                        </div>
+                        <div class="stat">
+                            <span>Nornites:</span>
+                            <span class="stat-value" id="entity-nornite">0</span>
+                        </div>
+                        <div class="stat">
+                            <span>Gel-Spurs:</span>
+                            <span class="stat-value" id="entity-gelspur">0</span>
+                        </div>
+                        <div class="stat">
+                            <span>Threaded Ones:</span>
+                            <span class="stat-value" id="entity-threaded">0</span>
+                        </div>
+                        <div class="stat">
+                            <span>Guild Researchers:</span>
+                            <span class="stat-value" id="entity-guild">0</span>
+                        </div>
+                        <div class="stat">
+                            <span>Holoflies:</span>
+                            <span class="stat-value" id="entity-holo">0</span>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <h3>Controls</h3>
+                        <div id="controls">
+                            <button id="pauseBtn">Pause</button>
+                            <button id="speedUpBtn">Speed+</button>
+                            <button id="speedDownBtn">Speed-</button>
+                            <button id="spreadBtn">Saturophage</button>
+                            <button id="spawnBtn">Spawn</button>
+                            <button id="tableauBtn">Tableau</button>
+                            <button id="resetBtn">Reset</button>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <h3>Event Log</h3>
+                        <div id="log"></div>
+                    </div>
+                    
+                    <div class="section">
+                        <h3>Terrain Legend</h3>
+                        <div class="legend-grid">
+                            <span class="pearl">◊</span><span>White Forest Tree</span>
+                            <span class="bright-white">◈</span><span>Circuit Tree</span>
+                            <span class="green">♠</span><span>Normal Tree</span>
+                            <span class="dark-green">♣</span><span>Thin-Thickwood</span>
+                            <span class="lime">♦</span><span>Glimmerfern</span>
+                            <span class="cyan">≈</span><span>Water</span>
+                            <span class="bright-cyan">~</span><span>Living Water</span>
+                            <span class="blue">∼</span><span>Yane River</span>
+                            <span class="teal">⌇</span><span>Consciousness Stream</span>
+                            <span class="green">.</span><span>Grass</span>
+                            <span class="lime">:</span><span>Moss</span>
+                            <span class="brown">■</span><span>Rock/Mountain</span>
+                            <span class="gray">▓</span><span>Sha Shell (Dead)</span>
+                            <span class="red">×</span><span>Dead Zone</span>
+                            <span class="dark-red">⊗</span><span>Failed Integration</span>
+                            <span class="gold">◎</span><span>Tableau Site</span>
+                            <span class="violet">⊕</span><span>Memory Zone</span>
+                            <span class="orange">※</span><span>Flux Zone</span>
+                            <span class="purple">◉</span><span>Network Node</span>
+                            <span class="magenta">⚡</span><span>Guild Station</span>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <h3>Entity Legend</h3>
+                        <div class="legend-grid">
+                            <span class="yellow">S</span><span>Wandering Sha</span>
+                            <span class="purple">B</span><span>Si-Bull</span>
+                            <span class="cyan">n</span><span>Nornite Colony</span>
+                            <span class="green">g</span><span>Gel-Spur</span>
+                            <span class="bright-white">T</span><span>Threaded One</span>
+                            <span class="pink">@</span><span>Guild Researcher</span>
+                            <span class="lime">h</span><span>Holofly Swarm</span>
+                            <span class="teal">V</span><span>Voidwhisper</span>
+                            <span class="gold">F</span><span>Streamtail Fox</span>
+                            <span class="brown">t</span><span>Stonebound Turtle</span>
+                            <span class="orange">K</span><span>Korsynthara</span>
+                            <span class="violet">Y</span><span>Yantrex</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // World configuration - SLOWED DOWN
+        const CONFIG = {
+            width: 160,
+            height: 60,
+            updateInterval: 400, // Slowed from 200 to 400ms
+            saturophageSpreadRate: 0.01, // Reduced spread rate
+            creatureSpawnRate: 0.001 // Reduced spawn rate
+        };
+
+        // Bioregion presets
+        const BIOREGIONS = {
+            balanced: {
+                name: "Balanced Forest",
+                description: "Mixed integration levels",
+                terrain: { tree: 0.25, water: 0.12, rock: 0.05, grass: 0.4 },
+                saturation: 0.3,
+                consciousness: 0.2,
+                deadZones: 0.05,
+                creatures: { sha: 1, threaded: 0.5, guild: 0.8, normal: 2 },
+                mountains: 3,
+                rivers: 2
+            },
+            white_core: {
+                name: "White Forest Core",
+                description: "High Saturophage integration",
+                terrain: { tree: 0.35, water: 0.08, rock: 0.03, grass: 0.25 },
+                saturation: 0.8,
+                consciousness: 0.6,
+                deadZones: 0.02,
+                creatures: { sha: 3, threaded: 2, guild: 1.5, normal: 1 },
+                initialSaturationRadius: 20,
+                mountains: 2,
+                rivers: 1
+            },
+            living_waters: {
+                name: "Living Waters",
+                description: "Aquatic consciousness networks",
+                terrain: { tree: 0.15, water: 0.45, rock: 0.02, grass: 0.15 },
+                saturation: 0.4,
+                consciousness: 0.5,
+                deadZones: 0.01,
+                creatures: { sha: 1.5, threaded: 1, guild: 1, normal: 2 },
+                mountains: 1,
+                rivers: 4
+            },
+            dead_border: {
+                name: "Dead Zone Border",
+                description: "Failed integration frontier",
+                terrain: { tree: 0.2, water: 0.08, rock: 0.15, grass: 0.3 },
+                saturation: 0.5,
+                consciousness: 0.3,
+                deadZones: 0.25,
+                creatures: { sha: 0.5, threaded: 0.3, guild: 1.5, normal: 1.5 },
+                mountains: 4,
+                rivers: 1
+            },
+            pristine: {
+                name: "Pristine Wilderness",
+                description: "Untouched by Saturophage",
+                terrain: { tree: 0.35, water: 0.15, rock: 0.08, grass: 0.35 },
+                saturation: 0.05,
+                consciousness: 0.05,
+                deadZones: 0,
+                creatures: { sha: 0.1, threaded: 0, guild: 0.5, normal: 4 },
+                mountains: 3,
+                rivers: 3
+            },
+            reactive: {
+                name: "Reactive Groves",
+                description: "Living architecture zones",
+                terrain: { tree: 0.4, water: 0.1, rock: 0.05, grass: 0.2 },
+                saturation: 0.6,
+                consciousness: 0.7,
+                deadZones: 0.03,
+                creatures: { sha: 2, threaded: 1.5, guild: 1, normal: 1.5 },
+                networkNodes: 3,
+                mountains: 2,
+                rivers: 2
+            },
+            deep_reach: {
+                name: "Deep Reach",
+                description: "Underground network access",
+                terrain: { tree: 0.15, water: 0.05, rock: 0.35, grass: 0.15 },
+                saturation: 0.5,
+                consciousness: 0.8,
+                deadZones: 0.08,
+                creatures: { sha: 1, threaded: 2, guild: 1.2, normal: 1 },
+                underground: true,
+                mountains: 6,
+                rivers: 1
+            },
+            flux_realm: {
+                name: "Flux Realm",
+                description: "Temporal distortion zones",
+                terrain: { tree: 0.25, water: 0.15, rock: 0.08, grass: 0.25 },
+                saturation: 0.4,
+                consciousness: 0.4,
+                deadZones: 0.06,
+                creatures: { sha: 1.5, threaded: 1, guild: 1, normal: 1.5 },
+                temporalChaos: 3,
+                mountains: 3,
+                rivers: 2
+            }
+        };
+
+        // Extended cell types
+        const CELL_TYPES = {
+            EMPTY: { char: ' ', color: 'dark-gray', saturophage: 0 },
+            GRASS: { char: '.', color: 'green', saturophage: 0 },
+            MOSS: { char: ':', color: 'lime', saturophage: 0 },
+            TREE: { char: '♠', color: 'green', saturophage: 0 },
+            THICKWOOD: { char: '♣', color: 'dark-green', saturophage: 0 },
+            GLIMMERFERN: { char: '♦', color: 'lime', saturophage: 0.2 },
+            WHITE_TREE: { char: '◊', color: 'pearl', saturophage: 1 },
+            CIRCUIT_TREE: { char: '◈', color: 'bright-white', saturophage: 1 },
+            WATER: { char: '≈', color: 'cyan', saturophage: 0 },
+            LIVING_WATER: { char: '~', color: 'bright-cyan', saturophage: 0.8 },
+            RIVER: { char: '∼', color: 'blue', saturophage: 0 },
+            CONSCIOUSNESS_STREAM: { char: '⌇', color: 'teal', saturophage: 0.9 },
+            ROCK: { char: '■', color: 'brown', saturophage: 0 },
+            SHA_SHELL: { char: '▓', color: 'gray', saturophage: 0.5 },
+            DEAD: { char: '×', color: 'red', saturophage: -1 },
+            FAILED: { char: '⊗', color: 'dark-red', saturophage: -1 },
+            FLUX: { char: '※', color: 'orange', saturophage: 0.5 },
+            MEMORY: { char: '⊕', color: 'violet', saturophage: 0.6 },
+            TABLEAU: { char: '◎', color: 'gold', saturophage: 1 },
+            NETWORK_NODE: { char: '◉', color: 'purple', saturophage: 0.8 },
+            GUILD_STATION: { char: '⚡', color: 'magenta', saturophage: 0 }
+        };
+
+        // Extended creature types
+        const CREATURES = {
+            SHA: { char: 'S', color: 'yellow', consciousness: 0.9, speed: 0.3 },
+            SIBULL: { char: 'B', color: 'purple', consciousness: 0.6, speed: 0.8 },
+            NORNITE: { char: 'n', color: 'cyan', consciousness: 0.3, speed: 1.0 },
+            GELSPUR: { char: 'g', color: 'green', consciousness: 0.7, speed: 0.5 },
+            THREADED: { char: 'T', color: 'bright-white', consciousness: 1.0, speed: 0.2 },
+            GUILD: { char: '@', color: 'pink', consciousness: 0.4, speed: 0.6 },
+            HOLOFLY: { char: 'h', color: 'lime', consciousness: 0.1, speed: 1.5 },
+            VOIDWHISPER: { char: 'V', color: 'teal', consciousness: 0.8, speed: 0.4 },
+            FOX: { char: 'F', color: 'gold', consciousness: 0.5, speed: 0.9 },
+            TURTLE: { char: 't', color: 'brown', consciousness: 0.4, speed: 0.1 },
+            KORSYNTHARA: { char: 'K', color: 'orange', consciousness: 0.7, speed: 0.7 },
+            YANTREX: { char: 'Y', color: 'violet', consciousness: 0.6, speed: 0.5 }
+        };
+
+        // Game state
+        const state = {
+            world: [],
+            heightMap: [],
+            creatures: [],
+            cycle: 0,
+            paused: false,
+            updateInterval: CONFIG.updateInterval,
+            saturophageLevel: 0,
+            consciousnessLevel: 0,
+            tableaus: [],
+            currentBiome: 'balanced',
+            seed: null,
+            rng: null
+        };
+
+        // Seeded random number generator
+        class SeededRandom {
+            constructor(seed) {
+                this.seed = seed;
+            }
+            
+            next() {
+                this.seed = (this.seed * 9301 + 49297) % 233280;
+                return this.seed / 233280;
+            }
+            
+            range(min, max) {
+                return min + this.next() * (max - min);
+            }
+            
+            int(min, max) {
+                return Math.floor(this.range(min, max + 1));
+            }
+        }
+
+        function hashString(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash = hash & hash;
+            }
+            return Math.abs(hash);
+        }
+
+        // Overlay dragging
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+        
+        const overlay = document.getElementById('overlay');
+        const overlayHeader = document.getElementById('overlayHeader');
+        
+        overlayHeader.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            dragOffset.x = e.clientX - overlay.offsetLeft;
+            dragOffset.y = e.clientY - overlay.offsetTop;
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                overlay.style.left = (e.clientX - dragOffset.x) + 'px';
+                overlay.style.top = (e.clientY - dragOffset.y) + 'px';
+                overlay.style.right = 'auto';
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+        
+        document.getElementById('overlayClose').addEventListener('click', () => {
+            overlay.classList.add('hidden');
+        });
+        
+        document.getElementById('toggleOverlay').addEventListener('click', () => {
+            overlay.classList.toggle('hidden');
+        });
+
+        // Biome selection
+        document.querySelectorAll('.biome-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.biome-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                state.currentBiome = btn.dataset.biome;
+                document.getElementById('currentBiome').textContent = BIOREGIONS[state.currentBiome].name;
+            });
+        });
+
+        document.getElementById('generateBtn').addEventListener('click', () => {
+            const seedInput = document.getElementById('seedInput').value.trim();
+            if (seedInput) {
+                state.seed = hashString(seedInput);
+                document.getElementById('currentSeed').textContent = seedInput;
+            } else {
+                state.seed = Date.now();
+                document.getElementById('currentSeed').textContent = 'Random';
+            }
+            state.rng = new SeededRandom(state.seed);
+            initWorld();
+        });
+
+        // Generate height map for terrain
+        function generateHeightMap(biome) {
+            const rand = state.rng ? () => state.rng.next() : Math.random;
+            const heightMap = [];
+            
+            // Initialize with base noise
+            for (let y = 0; y < CONFIG.height; y++) {
+                heightMap[y] = [];
+                for (let x = 0; x < CONFIG.width; x++) {
+                    heightMap[y][x] = 0.5;
+                }
+            }
+            
+            // Add mountain clusters
+            const mountainCount = biome.mountains || 3;
+            const mountains = [];
+            
+            for (let i = 0; i < mountainCount; i++) {
+                const mx = Math.floor(rand() * CONFIG.width);
+                const my = Math.floor(rand() * CONFIG.height);
+                const radius = 8 + Math.floor(rand() * 12);
+                const height = 0.7 + rand() * 0.3;
+                mountains.push({ x: mx, y: my, radius, height });
+                
+                // Create mountain with falloff
+                for (let y = 0; y < CONFIG.height; y++) {
+                    for (let x = 0; x < CONFIG.width; x++) {
+                        const dx = x - mx;
+                        const dy = y - my;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < radius) {
+                            const influence = (1 - dist / radius) * height;
+                            heightMap[y][x] += influence;
+                        }
+                    }
+                }
+            }
+            
+            // Add smaller hills between mountains
+            for (let i = 0; i < mountainCount * 3; i++) {
+                const hx = Math.floor(rand() * CONFIG.width);
+                const hy = Math.floor(rand() * CONFIG.height);
+                const hradius = 4 + Math.floor(rand() * 6);
+                const hheight = 0.2 + rand() * 0.3;
+                
+                for (let y = 0; y < CONFIG.height; y++) {
+                    for (let x = 0; x < CONFIG.width; x++) {
+                        const dx = x - hx;
+                        const dy = y - hy;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < hradius) {
+                            const influence = (1 - dist / hradius) * hheight;
+                            heightMap[y][x] += influence;
+                        }
+                    }
+                }
+            }
+            
+            // Add valleys (negative height)
+            for (let i = 0; i < mountainCount * 2; i++) {
+                const vx = Math.floor(rand() * CONFIG.width);
+                const vy = Math.floor(rand() * CONFIG.height);
+                const vradius = 6 + Math.floor(rand() * 8);
+                const vdepth = -(0.3 + rand() * 0.3);
+                
+                for (let y = 0; y < CONFIG.height; y++) {
+                    for (let x = 0; x < CONFIG.width; x++) {
+                        const dx = x - vx;
+                        const dy = y - vy;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < vradius) {
+                            const influence = (1 - dist / vradius) * vdepth;
+                            heightMap[y][x] += influence;
+                        }
+                    }
+                }
+            }
+            
+            // Normalize and add subtle noise
+            let minH = Infinity, maxH = -Infinity;
+            for (let y = 0; y < CONFIG.height; y++) {
+                for (let x = 0; x < CONFIG.width; x++) {
+                    minH = Math.min(minH, heightMap[y][x]);
+                    maxH = Math.max(maxH, heightMap[y][x]);
+                }
+            }
+            
+            for (let y = 0; y < CONFIG.height; y++) {
+                for (let x = 0; x < CONFIG.width; x++) {
+                    heightMap[y][x] = (heightMap[y][x] - minH) / (maxH - minH);
+                    heightMap[y][x] += (rand() - 0.5) * 0.05; // Subtle noise
+                    heightMap[y][x] = Math.max(0, Math.min(1, heightMap[y][x]));
+                }
+            }
+            
+            return heightMap;
+        }
+
+        // Generate rivers that follow valleys with branching
+        function generateRivers(heightMap, biome) {
+            const rand = state.rng ? () => state.rng.next() : Math.random;
+            const riverCount = biome.rivers || 2;
+            const rivers = [];
+            
+            for (let r = 0; r < riverCount; r++) {
+                // Start from high elevation
+                let startX, startY, maxAttempts = 50;
+                do {
+                    startX = Math.floor(rand() * CONFIG.width);
+                    startY = Math.floor(rand() * CONFIG.height);
+                    maxAttempts--;
+                } while (heightMap[startY][startX] < 0.6 && maxAttempts > 0);
+                
+                const river = [];
+                let x = startX, y = startY;
+                const visited = new Set();
+                
+                // Flow downhill
+                for (let step = 0; step < 150; step++) {
+                    const key = `${x},${y}`;
+                    if (visited.has(key)) break;
+                    visited.add(key);
+                    river.push({ x, y });
+                    
+                    // Find lowest neighbor
+                    let lowestH = heightMap[y][x];
+                    let nextX = x, nextY = y;
+                    
+                    const directions = [
+                        [-1, 0], [1, 0], [0, -1], [0, 1],
+                        [-1, -1], [-1, 1], [1, -1], [1, 1]
+                    ];
+                    
+                    // Shuffle for variety
+                    for (let i = directions.length - 1; i > 0; i--) {
+                        const j = Math.floor(rand() * (i + 1));
+                        [directions[i], directions[j]] = [directions[j], directions[i]];
+                    }
+                    
+                    for (const [dx, dy] of directions) {
+                        const nx = x + dx;
+                        const ny = y + dy;
+                        if (nx >= 0 && nx < CONFIG.width && ny >= 0 && ny < CONFIG.height) {
+                            const nkey = `${nx},${ny}`;
+                            if (!visited.has(nkey) && heightMap[ny][nx] < lowestH) {
+                                lowestH = heightMap[ny][nx];
+                                nextX = nx;
+                                nextY = ny;
+                            }
+                        }
+                    }
+                    
+                    // Occasionally branch
+                    if (rand() < 0.08 && step > 20) {
+                        const branchDir = directions[Math.floor(rand() * 4)];
+                        const bx = x + branchDir[0];
+                        const by = y + branchDir[1];
+                        if (bx >= 0 && bx < CONFIG.width && by >= 0 && by < CONFIG.height) {
+                            const branch = [];
+                            let branchX = bx, branchY = by;
+                            for (let b = 0; b < 30; b++) {
+                                if (branchX < 0 || branchX >= CONFIG.width || 
+                                    branchY < 0 || branchY >= CONFIG.height) break;
+                                branch.push({ x: branchX, y: branchY });
+                                
+                                // Follow general downstream direction
+                                const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                                const dir = dirs[Math.floor(rand() * dirs.length)];
+                                branchX += dir[0];
+                                branchY += dir[1];
+                            }
+                            rivers.push(branch);
+                        }
+                    }
+                    
+                    if (nextX === x && nextY === y) break; // Stuck
+                    x = nextX;
+                    y = nextY;
+                    
+                    // Stop at water level
+                    if (heightMap[y][x] < 0.25) break;
+                }
+                
+                rivers.push(river);
+            }
+            
+            return rivers;
+        }
+
+        // Initialize world with improved terrain
+        function initWorld() {
+            state.world = [];
+            state.creatures = [];
+            state.tableaus = [];
+            state.cycle = 0;
+            state.saturophageLevel = 0;
+            
+            const rand = state.rng ? () => state.rng.next() : Math.random;
+            const biome = BIOREGIONS[state.currentBiome];
+            const terrain = biome.terrain;
+            
+            // Generate height map
+            state.heightMap = generateHeightMap(biome);
+            
+            // Generate rivers
+            const rivers = generateRivers(state.heightMap, biome);
+            const riverSet = new Set();
+            rivers.forEach(river => {
+                river.forEach(({x, y}) => riverSet.add(`${x},${y}`));
+            });
+            
+            // Generate base terrain
+            for (let y = 0; y < CONFIG.height; y++) {
+                state.world[y] = [];
+                for (let x = 0; x < CONFIG.width; x++) {
+                    const height = state.heightMap[y][x];
+                    const r = rand();
+                    let cell;
+                    
+                    // Rivers follow valleys
+                    if (riverSet.has(`${x},${y}`)) {
+                        cell = { ...CELL_TYPES.RIVER, x, y };
+                    }
+                    // Mountains and rocks at high elevation
+                    else if (height > 0.75) {
+                        cell = { ...CELL_TYPES.ROCK, x, y };
+                    }
+                    else if (height > 0.65 && r < terrain.rock * 2) {
+                        cell = { ...CELL_TYPES.ROCK, x, y };
+                    }
+                    // Water in valleys
+                    else if (height < 0.25 && r < terrain.water * 3) {
+                        cell = { ...CELL_TYPES.WATER, x, y };
+                    }
+                    // Trees on moderate slopes
+                    else if (height > 0.35 && height < 0.6) {
+                        if (r < terrain.tree * 0.3) {
+                            cell = { ...CELL_TYPES.THICKWOOD, x, y };
+                        } else if (r < terrain.tree * 0.7) {
+                            cell = { ...CELL_TYPES.TREE, x, y };
+                        } else if (r < terrain.tree) {
+                            cell = { ...CELL_TYPES.GLIMMERFERN, x, y };
+                        } else if (r < terrain.tree + terrain.grass * 0.5) {
+                            cell = { ...CELL_TYPES.MOSS, x, y };
+                        } else {
+                            cell = { ...CELL_TYPES.GRASS, x, y };
+                        }
+                    }
+                    // Grass in flat areas
+                    else if (r < terrain.grass) {
+                        cell = height < 0.4 ? { ...CELL_TYPES.MOSS, x, y } : { ...CELL_TYPES.GRASS, x, y };
+                    }
+                    else {
+                        cell = { ...CELL_TYPES.EMPTY, x, y };
+                    }
+                    
+                    state.world[y][x] = cell;
+                    cell.temporal = 1.0;
+                    cell.consciousness = biome.consciousness * rand() * 0.3;
+                    cell.saturophage = Math.max(0, cell.saturophage + biome.saturation * rand() * 0.2);
+                }
+            }
+            
+            const centerX = Math.floor(CONFIG.width / 2);
+            const centerY = Math.floor(CONFIG.height / 2);
+            
+            // Apply bioregion-specific transformations
+            if (biome.initialSaturationRadius) {
+                spreadSaturophage(centerX, centerY, biome.initialSaturationRadius);
+            } else {
+                spreadSaturophage(centerX, centerY, 8);
+            }
+            
+            // Add Dead Zones
+            const deadZoneCount = Math.floor(CONFIG.width * CONFIG.height * biome.deadZones / 100);
+            for (let i = 0; i < deadZoneCount; i++) {
+                const x = Math.floor(rand() * CONFIG.width);
+                const y = Math.floor(rand() * CONFIG.height);
+                spreadDeadZone(x, y, 2 + Math.floor(rand() * 3));
+            }
+            
+            // Network nodes
+            if (biome.networkNodes) {
+                for (let i = 0; i < biome.networkNodes * 5; i++) {
+                    const x = Math.floor(rand() * CONFIG.width);
+                    const y = Math.floor(rand() * CONFIG.height);
+                    if (state.world[y][x].saturophage > 0.5) {
+                        state.world[y][x] = { ...CELL_TYPES.NETWORK_NODE, x, y, temporal: 1.0, consciousness: 0.8, saturophage: 0.8 };
+                    }
+                }
+            }
+            
+            // Temporal chaos
+            if (biome.temporalChaos) {
+                for (let i = 0; i < biome.temporalChaos * 10; i++) {
+                    const x = Math.floor(rand() * CONFIG.width);
+                    const y = Math.floor(rand() * CONFIG.height);
+                    const cell = state.world[y][x];
+                    if (rand() < 0.5) {
+                        cell.char = CELL_TYPES.FLUX.char;
+                        cell.color = CELL_TYPES.FLUX.color;
+                        cell.temporal = 2.0 + rand() * 2;
+                    } else {
+                        cell.char = CELL_TYPES.MEMORY.char;
+                        cell.color = CELL_TYPES.MEMORY.color;
+                        cell.temporal = 0.2 + rand() * 0.3;
+                    }
+                }
+            }
+            
+            // Create Tableaus in valleys
+            const tableauCount = biome.saturation > 0.5 ? 3 : 1;
+            for (let i = 0; i < tableauCount; i++) {
+                let tx, ty, minHeight = 1;
+                for (let attempt = 0; attempt < 20; attempt++) {
+                    const testX = 10 + Math.floor(rand() * (CONFIG.width - 20));
+                    const testY = 10 + Math.floor(rand() * (CONFIG.height - 20));
+                    if (state.heightMap[testY][testX] < minHeight) {
+                        minHeight = state.heightMap[testY][testX];
+                        tx = testX;
+                        ty = testY;
+                    }
+                }
+                createTableau(tx, ty);
+            }
+            
+            // Guild Station
+            state.world[5][10] = { ...CELL_TYPES.GUILD_STATION, x: 10, y: 5, temporal: 1.0, consciousness: 0 };
+            
+            // Sha Shells
+            const shellCount = biome.saturation > 0.6 ? 8 : 3;
+            for (let i = 0; i < shellCount; i++) {
+                const x = Math.floor(rand() * CONFIG.width);
+                const y = Math.floor(rand() * CONFIG.height);
+                state.world[y][x] = { ...CELL_TYPES.SHA_SHELL, x, y, temporal: 1.0, consciousness: 0.5 };
+            }
+            
+            // Spawn creatures
+            const creatureMult = biome.creatures;
+            
+            for (let i = 0; i < Math.floor(2 * creatureMult.sha); i++) {
+                spawnCreature('SHA', centerX + (rand() - 0.5) * 40, centerY + (rand() - 0.5) * 30);
+            }
+            
+            for (let i = 0; i < Math.floor(2 * creatureMult.threaded); i++) {
+                spawnCreature('THREADED');
+            }
+            
+            for (let i = 0; i < Math.floor(2 * creatureMult.guild); i++) {
+                spawnCreature('GUILD', 10 + rand() * 20, 5 + rand() * 10);
+            }
+            
+            const normalCreatures = ['NORNITE', 'HOLOFLY', 'FOX', 'TURTLE', 'GELSPUR', 'SIBULL'];
+            for (let i = 0; i < Math.floor(10 * creatureMult.normal); i++) {
+                const type = normalCreatures[Math.floor(rand() * normalCreatures.length)];
+                spawnCreature(type);
+            }
+            
+            addLog('transform', `${biome.name} initialized - ${biome.description}`);
+            if (state.seed) {
+                addLog('transform', `World seed: ${state.seed}`);
+            }
+        }
+
+        function spreadDeadZone(cx, cy, radius) {
+            for (let dy = -radius; dy <= radius; dy++) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist <= radius) {
+                        const x = cx + dx;
+                        const y = cy + dy;
+                        if (x >= 0 && x < CONFIG.width && y >= 0 && y < CONFIG.height) {
+                            const cell = state.world[y][x];
+                            if (Math.random() < 0.7) {
+                                cell.char = Math.random() < 0.5 ? CELL_TYPES.DEAD.char : CELL_TYPES.FAILED.char;
+                                cell.color = Math.random() < 0.5 ? CELL_TYPES.DEAD.color : CELL_TYPES.FAILED.color;
+                                cell.saturophage = -1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function createTableau(cx, cy) {
+            if (cx < 5 || cx >= CONFIG.width - 5 || cy < 5 || cy >= CONFIG.height - 5) return;
+            
+            state.tableaus.push({ x: cx, y: cy });
+            
+            for (let dy = -3; dy <= 3; dy++) {
+                for (let dx = -4; dx <= 4; dx++) {
+                    const x = cx + dx;
+                    const y = cy + dy;
+                    if (x >= 0 && x < CONFIG.width && y >= 0 && y < CONFIG.height) {
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < 3) {
+                            state.world[y][x] = { ...CELL_TYPES.TABLEAU, x, y, temporal: 1.0, consciousness: 1.0, saturophage: 1 };
+                        } else if (dist < 4) {
+                            state.world[y][x] = { ...CELL_TYPES.NETWORK_NODE, x, y, temporal: 1.2, consciousness: 0.8, saturophage: 0.8 };
+                        }
+                    }
+                }
+            }
+            
+            addLog('saturophage', `Tableau site manifests at (${cx},${cy})`);
+        }
+
+        function spreadSaturophage(cx, cy, radius) {
+            for (let dy = -radius; dy <= radius; dy++) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist <= radius) {
+                        const x = cx + dx;
+                        const y = cy + dy;
+                        if (x >= 0 && x < CONFIG.width && y >= 0 && y < CONFIG.height) {
+                            transformCell(x, y, (1 - dist / radius) * 0.5);
+                        }
+                    }
+                }
+            }
+        }
+
+        function transformCell(x, y, intensity) {
+            const cell = state.world[y][x];
+            
+            if (cell.saturophage === -1) return;
+            if (cell.char === '⚡' || cell.char === '◎') return;
+            
+            const newSaturation = Math.min(1, cell.saturophage + intensity * 0.3);
+            cell.saturophage = newSaturation;
+            
+            if (newSaturation > 0.9) {
+                if (cell.char === '♠' || cell.char === '♣' || cell.char === '.') {
+                    cell.char = Math.random() < 0.5 ? CELL_TYPES.WHITE_TREE.char : CELL_TYPES.CIRCUIT_TREE.char;
+                    cell.color = Math.random() < 0.5 ? CELL_TYPES.WHITE_TREE.color : CELL_TYPES.CIRCUIT_TREE.color;
+                    if (Math.random() < 0.05) {
+                        addLog('transform', `Tree achieves full integration at (${x},${y})`);
+                    }
+                } else if (cell.char === '≈' || cell.char === '∼') {
+                    cell.char = Math.random() < 0.7 ? CELL_TYPES.LIVING_WATER.char : CELL_TYPES.CONSCIOUSNESS_STREAM.char;
+                    cell.color = Math.random() < 0.7 ? CELL_TYPES.LIVING_WATER.color : CELL_TYPES.CONSCIOUSNESS_STREAM.color;
+                }
+            } else if (newSaturation > 0.6) {
+                cell.consciousness = Math.min(1, cell.consciousness + 0.1);
+                if (Math.random() < 0.005 && cell.char !== '◉') {
+                    cell.char = CELL_TYPES.NETWORK_NODE.char;
+                    cell.color = CELL_TYPES.NETWORK_NODE.color;
+                    addLog('saturophage', `Network node emerges at (${x},${y})`);
+                }
+            }
+            
+            if (Math.random() < 0.0008 && newSaturation > 0.5) {
+                cell.char = Math.random() < 0.5 ? CELL_TYPES.DEAD.char : CELL_TYPES.FAILED.char;
+                cell.color = Math.random() < 0.5 ? CELL_TYPES.DEAD.color : CELL_TYPES.FAILED.color;
+                cell.saturophage = -1;
+                addLog('transform', `Integration failure at (${x},${y})`);
+            }
+        }
+
+        function spawnCreature(type, x, y) {
+            if (!x) x = Math.floor(Math.random() * CONFIG.width);
+            if (!y) y = Math.floor(Math.random() * CONFIG.height);
+            
+            const creature = {
+                ...CREATURES[type],
+                type,
+                x: Math.floor(x),
+                y: Math.floor(y),
+                age: 0,
+                saturation: 0
+            };
+            
+            state.creatures.push(creature);
+            if (Math.random() < 0.3) {
+                addLog('creature', `${type} manifests at (${creature.x},${creature.y})`);
+            }
+        }
+
+        function updateCreatures() {
+            for (let i = state.creatures.length - 1; i >= 0; i--) {
+                const creature = state.creatures[i];
+                creature.age++;
+                
+                if (Math.random() < creature.speed * 0.3) {
+                    const dx = Math.floor(Math.random() * 3) - 1;
+                    const dy = Math.floor(Math.random() * 3) - 1;
+                    const newX = Math.max(0, Math.min(CONFIG.width - 1, creature.x + dx));
+                    const newY = Math.max(0, Math.min(CONFIG.height - 1, creature.y + dy));
+                    
+                    const targetCell = state.world[newY][newX];
+                    if (targetCell.saturophage !== -1 || creature.type === 'VOIDWHISPER') {
+                        creature.x = newX;
+                        creature.y = newY;
+                    }
+                }
+                
+                const currentCell = state.world[creature.y][creature.x];
+                creature.saturation = Math.min(1, creature.saturation + currentCell.saturophage * 0.01);
+                
+                if (creature.type === 'SHA' && Math.random() < 0.05) {
+                    spreadSaturophage(creature.x, creature.y, 3);
+                }
+                
+                if (creature.type === 'THREADED' && Math.random() < 0.02) {
+                    addLog('transform', `Threaded One radiates ancient wisdom at (${creature.x},${creature.y})`);
+                    spreadSaturophage(creature.x, creature.y, 4);
+                }
+                
+                if (creature.type === 'GUILD' && currentCell.char === '◎' && Math.random() < 0.03) {
+                    addLog('guild', `Researcher documents Tableau at (${creature.x},${creature.y})`);
+                }
+                
+                if (creature.type === 'HOLOFLY' && Math.random() < 0.1) {
+                    const nearbyPlant = findNearbyType(creature.x, creature.y, ['♠', '♣', '♦', '◊']);
+                    if (nearbyPlant && state.creatures.length < 100) {
+                        spawnCreature('HOLOFLY', nearbyPlant.x, nearbyPlant.y);
+                    }
+                }
+                
+                if (creature.type === 'VOIDWHISPER' && Math.random() < 0.01) {
+                    addLog('temporal', `Voidwhisper glimpses cosmic patterns at (${creature.x},${creature.y})`);
+                }
+                
+                if (creature.age > 1200 && creature.saturation > 0.9 && Math.random() < 0.01) {
+                    addLog('transform', `${creature.type} transcends physical form`);
+                    state.creatures.splice(i, 1);
+                }
+            }
+        }
+
+        function findNearbyType(x, y, chars) {
+            for (let dy = -3; dy <= 3; dy++) {
+                for (let dx = -3; dx <= 3; dx++) {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (nx >= 0 && nx < CONFIG.width && ny >= 0 && ny < CONFIG.height) {
+                        const cell = state.world[ny][nx];
+                        if (chars.includes(cell.char)) {
+                            return cell;
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        function updateWorld() {
+            if (state.paused) return;
+            
+            state.cycle++;
+            
+            if (Math.random() < CONFIG.saturophageSpreadRate) {
+                const sources = [];
+                for (let y = 0; y < CONFIG.height; y++) {
+                    for (let x = 0; x < CONFIG.width; x++) {
+                        if (state.world[y][x].saturophage > 0.7) {
+                            sources.push({x, y});
+                        }
+                    }
+                }
+                
+                if (sources.length > 0) {
+                    const source = sources[Math.floor(Math.random() * sources.length)];
+                    spreadSaturophage(source.x, source.y, 2);
+                }
+            }
+            
+            if (Math.random() < 0.008) {
+                const x = Math.floor(Math.random() * CONFIG.width);
+                const y = Math.floor(Math.random() * CONFIG.height);
+                const cell = state.world[y][x];
+                
+                if (Math.random() < 0.3) {
+                    cell.char = CELL_TYPES.FLUX.char;
+                    cell.color = CELL_TYPES.FLUX.color;
+                    cell.temporal = 2.0 + Math.random();
+                    addLog('temporal', `Flux Time manifests at (${x},${y})`);
+                } else {
+                    cell.char = CELL_TYPES.MEMORY.char;
+                    cell.color = CELL_TYPES.MEMORY.color;
+                    cell.temporal = 0.3;
+                    addLog('temporal', `Memory Time echo at (${x},${y})`);
+                }
+            }
+            
+            if (Math.random() < CONFIG.creatureSpawnRate && state.creatures.length < 150) {
+                const types = Object.keys(CREATURES);
+                const weights = {
+                    HOLOFLY: 3,
+                    NORNITE: 2,
+                    FOX: 2,
+                    GELSPUR: 1.5,
+                    SIBULL: 1,
+                    TURTLE: 1,
+                    SHA: 0.5,
+                    GUILD: 0.3,
+                    KORSYNTHARA: 0.5,
+                    YANTREX: 0.5,
+                    VOIDWHISPER: 0.2,
+                    THREADED: 0.1
+                };
+                
+                const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+                let rand = Math.random() * totalWeight;
+                
+                for (const type of types) {
+                    rand -= weights[type] || 1;
+                    if (rand <= 0) {
+                        spawnCreature(type);
+                        break;
+                    }
+                }
+            }
+            
+            updateCreatures();
+            updateStats();
+            render();
+        }
+
+        function render() {
+            let output = '';
+            const creatureMap = new Map();
+            state.creatures.forEach(c => {
+                const key = `${c.x},${c.y}`;
+                creatureMap.set(key, c);
+            });
+            
+            for (let y = 0; y < CONFIG.height; y++) {
+                for (let x = 0; x < CONFIG.width; x++) {
+                    const key = `${x},${y}`;
+                    
+                    if (creatureMap.has(key)) {
+                        const creature = creatureMap.get(key);
+                        output += `<span class="${creature.color}">${creature.char}</span>`;
+                    } else {
+                        const cell = state.world[y][x];
+                        output += `<span class="${cell.color}">${cell.char}</span>`;
+                    }
+                }
+                output += '\n';
+            }
+            
+            document.getElementById('canvas').innerHTML = output;
+        }
+
+        function updateStats() {
+            let whiteForest = 0, water = 0, dead = 0, flux = 0, memory = 0, total = 0;
+            let totalSaturation = 0, totalConsciousness = 0, totalTemporal = 0;
+            
+            for (let y = 0; y < CONFIG.height; y++) {
+                for (let x = 0; x < CONFIG.width; x++) {
+                    const cell = state.world[y][x];
+                    total++;
+                    
+                    if (cell.saturophage > 0.7) whiteForest++;
+                    if (cell.char === '≈' || cell.char === '∼' || cell.char === '~' || cell.char === '⌇') water++;
+                    if (cell.saturophage === -1) dead++;
+                    if (cell.char === '※') flux++;
+                    if (cell.char === '⊕') memory++;
+                    
+                    totalSaturation += Math.max(0, cell.saturophage);
+                    totalConsciousness += cell.consciousness || 0;
+                    totalTemporal += cell.temporal || 1;
+                }
+            }
+            
+            state.saturophageLevel = totalSaturation / total;
+            state.consciousnessLevel = totalConsciousness / total;
+            const avgTemporal = totalTemporal / total;
+            
+            document.getElementById('cycle').textContent = state.cycle;
+            document.getElementById('saturation').textContent = Math.round(state.saturophageLevel * 100) + '%';
+            document.getElementById('consciousness').textContent = 
+                state.consciousnessLevel < 0.1 ? 'Low' :
+                state.consciousnessLevel < 0.3 ? 'Moderate' :
+                state.consciousnessLevel < 0.6 ? 'High' : 'Network';
+            
+            document.getElementById('integration').textContent = 
+                dead / total > 0.1 ? 'Unstable' :
+                dead / total > 0.05 ? 'Stressed' :
+                whiteForest / total > 0.4 ? 'Advanced' : 'Stable';
+            
+            document.getElementById('temporal').textContent =
+                avgTemporal > 1.3 ? 'Accelerated' :
+                avgTemporal < 0.8 ? 'Slowed' : 'Normal';
+            
+            document.getElementById('biome-forest').textContent = Math.round(whiteForest / total * 100) + '%';
+            document.getElementById('biome-water').textContent = Math.round(water / total * 100) + '%';
+            document.getElementById('biome-dead').textContent = Math.round(dead / total * 100) + '%';
+            document.getElementById('biome-flux').textContent = flux + memory;
+            document.getElementById('biome-tableau').textContent = state.tableaus.length;
+            
+            const counts = {};
+            Object.keys(CREATURES).forEach(k => counts[k] = 0);
+            state.creatures.forEach(c => counts[c.type]++);
+            
+            document.getElementById('entity-sha').textContent = counts.SHA;
+            document.getElementById('entity-sibull').textContent = counts.SIBULL;
+            document.getElementById('entity-nornite').textContent = counts.NORNITE;
+            document.getElementById('entity-gelspur').textContent = counts.GELSPUR;
+            document.getElementById('entity-threaded').textContent = counts.THREADED;
+            document.getElementById('entity-guild').textContent = counts.GUILD;
+            document.getElementById('entity-holo').textContent = counts.HOLOFLY;
+        }
+
+        function addLog(type, message) {
+            const log = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${state.cycle}] ${message}`;
+            log.insertBefore(entry, log.firstChild);
+            
+            while (log.children.length > 60) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        // Controls
+        document.getElementById('pauseBtn').addEventListener('click', () => {
+            state.paused = !state.paused;
+            document.getElementById('pauseBtn').textContent = state.paused ? 'Resume' : 'Pause';
+        });
+
+        document.getElementById('speedUpBtn').addEventListener('click', () => {
+            state.updateInterval = Math.max(50, state.updateInterval - 50);
+            clearInterval(gameLoop);
+            gameLoop = setInterval(updateWorld, state.updateInterval);
+            addLog('temporal', 'Simulation time accelerated');
+        });
+
+        document.getElementById('speedDownBtn').addEventListener('click', () => {
+            state.updateInterval = Math.min(1000, state.updateInterval + 50);
+            clearInterval(gameLoop);
+            gameLoop = setInterval(updateWorld, state.updateInterval);
+            addLog('temporal', 'Simulation time decelerated');
+        });
+
+        document.getElementById('spreadBtn').addEventListener('click', () => {
+            const x = Math.floor(Math.random() * CONFIG.width);
+            const y = Math.floor(Math.random() * CONFIG.height);
+            spreadSaturophage(x, y, 10);
+            addLog('saturophage', `Saturophage surge at (${x},${y})`);
+        });
+
+        document.getElementById('spawnBtn').addEventListener('click', () => {
+            const types = Object.keys(CREATURES);
+            const type = types[Math.floor(Math.random() * types.length)];
+            spawnCreature(type);
+        });
+
+        document.getElementById('tableauBtn').addEventListener('click', () => {
+            const x = 20 + Math.floor(Math.random() * (CONFIG.width - 40));
+            const y = 10 + Math.floor(Math.random() * (CONFIG.height - 20));
+            createTableau(x, y);
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            state.seed = null;
+            state.rng = null;
+            document.getElementById('seedInput').value = '';
+            document.getElementById('currentSeed').textContent = 'Random';
+            initWorld();
+        });
+
+        // Initialize with balanced biome
+        document.querySelector('[data-biome="balanced"]').classList.add('active');
+        initWorld();
+        render();
+        let gameLoop = setInterval(updateWorld, state.updateInterval);
+    </script>
+</body>
+</html>
